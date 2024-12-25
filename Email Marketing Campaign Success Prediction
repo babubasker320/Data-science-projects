@@ -1,0 +1,86 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import pickle
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, precision_score, recall_score
+
+# Load the dataset
+file_path = r"D:\Excelr\p450projectdocumentemailmarketingcampaignsuccesspred\Email_Marketing_Campaign_Dataset_Rounded.xlsx"
+data = pd.read_excel(file_path)
+
+# Scale the numerical features
+numerical_columns = ['Customer_Age', 'Emails_Opened', 'Emails_Clicked', 'Purchase_History',
+                     'Time_Spent_On_Website', 'Days_Since_Last_Open', 'Customer_Engagement_Score']
+
+# Outlier detection
+fig,axs=plt.subplots(len(numerical_columns),figsize=(10,20))
+fig.tight_layout(pad=5.0)
+for i,column in enumerate(numerical_columns):
+    axs[i].boxplot(data[column],vert=False,patch_artist=True,boxprops=dict(facecolor='skyblue'))
+    axs[i].set_title(f'outliers of {column}')
+    axs[i].set_xlabel(column)
+plt.show()
+
+# Handle negative values in Time_Spent_On_Website by replacing them with the median
+median_time_spent = data['Time_Spent_On_Website'][data['Time_Spent_On_Website'] >= 0].median()
+data['Time_Spent_On_Website'] = data['Time_Spent_On_Website'].apply(lambda x: median_time_spent if x < 0 else x)
+
+
+# Encode the binary categorical columns
+data['Device_Type'] = data['Device_Type'].astype(int)
+data['Clicked_Previous_Emails'] = data['Clicked_Previous_Emails'].astype(int)
+
+
+# Apply standard scaling
+scaler = StandardScaler()
+data[numerical_columns] = scaler.fit_transform(data[numerical_columns])
+
+
+# Split the data into features (X) and target (y)
+X = data.drop('Opened_Previous_Emails', axis=1)
+y = data['Opened_Previous_Emails']
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Initialize models
+logistic_regression = LogisticRegression(random_state=42)
+random_forest = RandomForestClassifier(random_state=42)
+
+# Train and evaluate models
+model_performance = {}
+best_model = None
+best_roc_auc = 0
+
+for model_name, model in zip(["Logistic Regression", "Random Forest"], [logistic_regression, random_forest]):
+    model.fit(X_train, y_train)
+    y_prob = model.predict_proba(X_test)[:, 1]
+    y_pred = (y_prob >= 0.5).astype(int)
+
+    # Evaluate the model performance
+    accuracy = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    roc_auc = roc_auc_score(y_test, y_prob)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+
+    model_performance[model_name] = {'Accuracy': accuracy, 'F1 Score': f1, 'ROC AUC': roc_auc, 'Precision': precision,
+                                     'Recall': recall}
+
+    # Save the best model based on ROC AUC
+    if roc_auc > best_roc_auc:
+        best_roc_auc = roc_auc
+        best_model = model
+
+# Display the performance
+print("Model Performance:")
+print(model_performance)
+
+
+# Save the best model using pickle
+with open('best_model.pkl', 'wb') as file:
+    pickle.dump(best_model, file)
+print("Best model saved as 'best_model.pkl'")
